@@ -1,4 +1,4 @@
-name: Build project and push to ECR to begin deployment
+name: Build project, push to ECR, and deploy to ECS
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -34,10 +34,60 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push image to Amazon ECR (latest only)
+      - name: Build and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          IMAGE_TAG=${GITHUB_SHA::7}
+          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+          # also tag latest
+          docker tag $IMAGE_URI $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Generate taskdef.json
+        run: |
+          cat > taskdef.json <<EOL
+          {
+            "family": "${{ secrets.ENVIRONMENT_NAME }}-taskdef",
+            "networkMode": "awsvpc",
+            "requiresCompatibilities": ["FARGATE"],
+            "cpu": "256",
+            "memory": "512",
+            "executionRoleArn": "${{ secrets.ECS_TASK_EXEC_ROLE }}",
+            "containerDefinitions": [
+              {
+                "name": "${{ secrets.ENVIRONMENT_NAME }}-container",
+                "image": "${IMAGE_URI}",
+                "portMappings": [
+                  { "containerPort": ${{ secrets.APP_PORT }}, "protocol": "tcp" }
+                ],
+                "logConfiguration": {
+                  "logDriver": "awslogs",
+                  "options": {
+                    "awslogs-group": "/ecs/${{ secrets.ENVIRONMENT_NAME }}-log-group",
+                    "awslogs-region": "${{ secrets.AWS_REGION }}",
+                    "awslogs-stream-prefix": "${{ secrets.ENVIRONMENT_NAME }}-container-log"
+                  }
+                }
+              }
+            ]
+          }
+          EOL
+
+      - name: Generate appspec.yml
+        run: |
+          cat > appspec.yml <<EOL
+          version: 0.0
+          Resources:
+            - TargetService:
+                Type: AWS::ECS::Service
+                Properties:
+                  TaskDefinition: <REPLACED_AT_DEPLOY>
+                  LoadBalancerInfo:
+                    ContainerName: ${{ secrets.ENVIRONMENT_NAME }}-container
+                    ContainerPort: ${{ secrets.APP_PORT }}
+          EOL
