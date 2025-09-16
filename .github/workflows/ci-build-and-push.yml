@@ -56,11 +56,10 @@ jobs:
         run: |
           mkdir -p deployment
 
-          # Copy your existing files into deployment/
           cp appspec.yml deployment/appspec.yml
           cp taskdef.json deployment/taskdef.json
 
-          # Generate imageDetail.json
+          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:latest          
           cat > deployment/imageDetail.json <<EOL
           [
             {

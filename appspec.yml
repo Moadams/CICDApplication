@@ -1,9 +1,9 @@
-version: 0.0
+version: 1.0
 Resources:
   - TargetService:
       Type: AWS::ECS::Service
       Properties:
-        TaskDefinition: <TASK_DEFINITION>
+        TaskDefinition: arn:aws:ecs:eu-west-1:266735814394:task-definition/cicdlab-task-def:30
         LoadBalancerInfo:
           ContainerName: cicdlab-container
           ContainerPort: 8080
