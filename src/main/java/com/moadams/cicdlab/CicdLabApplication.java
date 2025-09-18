@@ -15,6 +15,6 @@ public class CicdLabApplication {
 
     @GetMapping("/")
     public String home(){
-        return "<h1>Michael Okyere Adams</h1> <p>Lab 1: Highly Available Full-Stack Application.</p>";
+        return "<h1>Michael Okyere Adams</h1> <p>Lab 1: Highly Available Full-Stack Application. Changes Made.</p>";
     }
 }
